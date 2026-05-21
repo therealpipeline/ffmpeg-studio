@@ -7,17 +7,6 @@ import fs from 'fs-extra';
 import { spawn, ChildProcess } from 'child_process';
 import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const OUTPUTS_DIR = path.join(__dirname, 'outputs');
-
-// Ensure directories exist
-fs.ensureDirSync(UPLOADS_DIR);
-fs.ensureDirSync(OUTPUTS_DIR);
 
 const app = express();
 const server = http.createServer(app);
@@ -27,10 +16,15 @@ const io = new Server(server, {
   },
 });
 
+const UPLOADS_DIR = path.resolve(process.cwd(), 'uploads');
+const OUTPUTS_DIR = path.resolve(process.cwd(), 'outputs');
+
+// Ensure directories exist
+fs.ensureDirSync(UPLOADS_DIR);
+fs.ensureDirSync(OUTPUTS_DIR);
+
 app.use(cors());
 app.use(express.json());
-
-// Auth/Security middleware could go here
 
 // Multer config
 const storage = multer.diskStorage({
@@ -54,9 +48,6 @@ app.post('/api/upload', upload.array('files'), (req, res) => {
 
 app.get('/api/files', async (req, res) => {
   try {
-    const uploads = await fs.readdir(UPLOADS_DIR);
-    const outputs = await fs.readdir(OUTPUTS_DIR);
-
     const mapFiles = async (dir: string, category: 'uploads' | 'outputs') => {
       const files = await fs.readdir(dir);
       return Promise.all(files.map(async (f) => {
@@ -66,7 +57,7 @@ app.get('/api/files', async (req, res) => {
           size: stats.size,
           mtime: stats.mtime,
           category,
-          path: `/api/view/${category}/${f}`, // For previewing
+          path: `/api/view/${category}/${f}`,
         };
       }));
     };
@@ -112,7 +103,6 @@ app.get('/api/download/:category/:filename', (req, res) => {
   res.download(filePath);
 });
 
-// Execute FFmpeg
 app.post('/api/execute', (req, res) => {
   const { command, sessionId } = req.body;
 
@@ -120,7 +110,6 @@ app.post('/api/execute', (req, res) => {
     return res.status(400).json({ error: 'Command and sessionId are required' });
   }
 
-  // Basic security check: ensure it starts with ffmpeg or ffprobe
   const parts = command.trim().split(/\s+/);
   const binary = parts[0];
 
@@ -128,21 +117,12 @@ app.post('/api/execute', (req, res) => {
     return res.status(400).json({ error: 'Only ffmpeg and ffprobe commands are allowed' });
   }
 
-  // Prevent shell injection by avoiding shell: true
-  // We need to parse the command string into arguments
-  // Note: This is simplified. Real command parsing with quotes is tricky.
-  // We'll use a regex that respects quotes.
   const args = command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g)?.slice(1).map(arg => {
     return arg.replace(/^["'](.+)["']$/, '$1');
   }) || [];
 
-  // Replace 'input.mp4' with actual paths if we ever want to automate, 
-  // but here we expect the user to use full names in the command.
-  // Actually, we should probably set the working directory to a shared temp or just handle paths.
-  // For simplicity, we'll run it with cwd as the root, and user must use relative paths like uploads/file.mp4
-  
   const process = spawn(binary, args, {
-    cwd: __dirname,
+    cwd: process.cwd(),
     shell: false,
   });
 
@@ -211,16 +191,14 @@ app.get('/api/metadata/:category/:filename', async (req, res) => {
   });
 });
 
-// Socket logic
 io.on('connection', (socket) => {
   socket.on('join-session', (sessionId) => {
     socket.join(sessionId);
   });
 });
 
-// Vite Middleware
 async function startServer() {
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -237,7 +215,7 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`FFmpeg Studio Backend running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 }
 
