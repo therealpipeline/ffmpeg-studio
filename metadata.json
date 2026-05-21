@@ -1,0 +1,6 @@
+{
+  "name": "FFmpeg Studio",
+  "description": "A professional FFmpeg command terminal with a graphical UI for video and audio processing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
